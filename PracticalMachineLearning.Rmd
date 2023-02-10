@@ -1,0 +1,165 @@
+---
+title: "PracticalMachineLearning"
+author: "Rishi Krishnan Murugesan"
+date: "2/10/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+The goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+## Data
+
+The data for this project come from: http://groupware.les.inf.puc-rio.br/har.
+
+Training Data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+Test Data: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Load required libraries
+
+```{r}
+library(lattice)
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+```
+
+## Data Load, clean and Feature Selection 
+
+#### Load Data
+
+```{r}
+train_url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+test_url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+
+train_data <- read.csv(url(train_url), na.strings = c("NA", "", "#DIV/0!"))
+test_data <- read.csv(url(test_url), na.strings = c("NA", "", "#DIV/0!"))
+
+dim(train_data)
+
+dim (test_data)
+```
+
+#### Create two parition with 80% and 20% from training data
+
+```{r}
+set.seed(2023)
+input_train <- createDataPartition(train_data$classe, p=0.8, list=FALSE)
+training_set = train_data[input_train, ]
+test_set = train_data[-input_train, ]
+dim(training_set)
+dim(test_set)
+```
+
+#### Check for near-zero-variance variables and remove them
+
+```{r}
+nzv_col <- nearZeroVar(training_set)
+training_set <- training_set[ , -nzv_col]
+test_set <- test_set[ , -nzv_col]
+dim(training_set)
+dim(test_set)
+```
+
+#### Remove features/columns that are mostly(80%) NA
+
+```{r}
+na_spc_var <- sapply(training_set, function(x) mean(is.na(x))) > 0.8
+summary(na_spc_var)
+training_set <- training_set[, na_spc_var == FALSE]
+test_set <- test_set[, na_spc_var == FALSE]
+dim(training_set)
+dim(test_set)
+```
+
+#### Remove the first 5 columns as they are not useful features
+
+```{r}
+training_set <- training_set[, -(1:5)]
+test_set <- test_set[, -(1:5)]
+dim(training_set)
+dim(test_set)
+```
+
+## Perform Correlation Analysis
+```{r}
+corr_matrix <- cor(training_set[, -54])
+corrplot(corr_matrix, type="lower", t1.cex=0.6, t1.col = rgb(0,0,0))
+```
+
+Positive correlated variables are displayed in blue color. While the negative correlation is displyed in Red.
+Color intensity indicates the correlation strength.
+
+## Prediction Models
+
+#### 1. Decision Trees
+
+a. Build the model
+
+```{r}
+set.seed(2023)
+model_decision_tree <- rpart(classe ~ ., data=training_set, method="class")
+rpart.plot(model_decision_tree, extra=106)
+```
+
+b. Make Prediction
+
+```{r}
+predict_decision_tree <- predict(model_decision_tree, newdata = test_set, type="class")
+conf_matrix_dt <- confusionMatrix(predict_decision_tree, as.factor(test_set$classe))
+conf_matrix_dt
+```
+
+The prediction accuracy of the decision tree model is 77.19
+
+c. Plot the accuracy of the model by class
+
+```{r}
+plot(conf_matrix_dt$table, col=conf_matrix_dt$byClass, main="Decision Tree Prediction By Class")
+```
+
+#### 2. Random Forest Model
+
+a. Build the model
+
+```{r}
+model_random_forest <- randomForest(as.factor(classe)~ ., data=training_set, importance=TRUE, ntrees=20)
+```
+b. Make Prediction
+
+```{r}
+predict_random_forest <- predict(model_random_forest, newdata = test_set, type="class")
+conf_matrix_rf <- confusionMatrix(predict_random_forest, as.factor(test_set$classe))
+conf_matrix_rf
+```
+
+The prediction accuracy of the decision tree model is 99.82
+
+c. Plot the accuracy of the model by class
+
+```{r}
+plot(conf_matrix_rf$table, col=conf_matrix_rf$byClass, main="Random Forest Prediction By Class")
+```
+
+
+## Model Selection
+
+Based on the prediction accuracy between the Decision Tree model at 77.19% and Random Forest model at 99.82%, Random Forest model is chosen to make predictions for the test_data set. 
+
+## Predict Test Data using Random Forest Model
+
+```{r}
+predict_rft_test_data <- predict(model_random_forest, newdata = test_data, type="class")
+predict_rft_test_data
+```
